@@ -1,0 +1,29 @@
+import joblib
+import numpy as np 
+from flask import request
+from google.cloud import storage
+import json
+
+storage_client = storage.Client()
+bucket = storage_client.get_bucket("iris_lr")
+blob = bucket.blob("model.joblib")
+blob.download_to_filename("/tmp/model.joblib")
+model = joblib.load("/tmp/model.joblib")
+
+def predict(request):
+    data_json = request.get_json()
+        
+    # Retrieve the instances from the JSON object
+    instances = data_json.get("instances", [])
+    
+    # Convert the instances to a numpy array for prediction
+    data = np.array(instances)
+    
+    # Perform the prediction
+    predictions = model.predict(data)
+    
+    # Convert predictions to a list (if not already in a list form)
+    predictions_list = predictions.tolist()
+    
+    # Return the predictions as a JSON response
+    return json.dumps({"predictions": predictions_list})
