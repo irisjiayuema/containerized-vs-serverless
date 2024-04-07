@@ -1,6 +1,0 @@
-To deploy our Tensorflow model to vertex AI, we used the following command in order for to reference the variables and weights along with the model:
-gcloud ai models upload \
-  --region=us-central1 \
-  --display-name="saved_model.pb" \
-  --container-image-uri="us-docker.pkg.dev/vertex-ai/prediction/tf2-cpu.2-3:latest" \
-  --artifact-uri="gs://wine_nlp/"
