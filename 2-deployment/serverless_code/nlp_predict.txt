@@ -1,0 +1,81 @@
+import google.cloud
+from google.cloud import storage
+from tensorflow.keras.layers import Dense, Flatten, Conv2D, Embedding, Conv1D
+from tensorflow.keras import Model
+import tensorflow as tf
+import numpy as np
+import json
+
+model = None
+BUCKET_NAME = "wine_nlp"
+
+
+class CustomModel(Model):
+    def __init__(self):
+        super(CustomModel, self).__init__()
+
+
+        max_words = 2500
+        max_sequence_length = 150
+        embedding_vector_length = 64
+        num_classes = 10  # Update this if the number of classes varies
+
+        # Create the model layers
+        self.embedding = Embedding(input_dim=max_words, output_dim=embedding_vector_length, input_length=max_sequence_length)
+        self.conv1d = Conv1D(filters=50, kernel_size=5, activation='relu')
+        self.flatten = Flatten()
+        self.dense1 = Dense(units=100, activation='relu')
+        self.dense2 = Dense(units=num_classes, activation='softmax')
+
+
+    def call(self, x):
+        x = self.embedding(x)
+        x = self.conv1d(x)
+        x = self.flatten(x)
+        x = self.dense1(x)
+        return self.dense2(x)
+
+
+def download_blob(bucket_name, source_blob_name, destination_file_name):
+    """Downloads a blob from the bucket."""
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket(bucket_name)
+    blob = bucket.blob(source_blob_name)
+
+    blob.download_to_filename(destination_file_name)
+
+    print('Blob {} downloaded to {}.'.format(source_blob_name, destination_file_name))
+
+
+def predict(request):
+    global model
+    class_names = ['Pinot Noir', 'Chardonnay', 'Cabernet Sauvignon', 'Red Blend', 'Bordeaux-style Red Blend', 'Riesling', 'Sauvignon Blanc', 'Syrah', 'Rosé', 'Merlot']
+
+    # Model load which only happens during cold starts
+    if model is None:
+        download_blob(BUCKET_NAME, 'variables/variables.index', '/tmp/variables.index')
+        download_blob(BUCKET_NAME, 'variables/variables.data-00000-of-00001', '/tmp/variables.data-00000-of-00001')
+        model = CustomModel()
+
+        # Call the model to create its variables
+        dummy_input = tf.zeros((1, 150), dtype=tf.int32)  # Assuming input shape (batch_size, sequence_length)
+        _ = model(dummy_input)
+        model.compile()
+        model.load_weights('/tmp/variables')
+
+    data_json = request.get_json()
+    
+    # Retrieve the instances from the JSON object
+    instances = data_json.get("instances", [])
+    
+    # Convert the instances to a numpy array for prediction
+    data = np.array(instances)
+    
+    # Perform the prediction
+    predictions = model.predict(data)
+    
+    # Convert predictions to a list (if not already in a list form)
+    predictions_list = predictions.tolist()
+    
+    # Return the predictions as a JSON response
+    return json.dumps({"predictions": predictions_list})
